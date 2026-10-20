@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ta">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Habit Tracker</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1d2330;--muted:#6b7280;--accent:#2f7d5b;--line:#e3e6eb;--dot:#e3e6eb;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14171c;--card:#1e2229;--text:#eceff4;--muted:#9aa3b2;--accent:#4cc38a;--line:#2d333c;--dot:#2d333c}}
+:root[data-theme="dark"]{--bg:#14171c;--card:#1e2229;--text:#eceff4;--muted:#9aa3b2;--accent:#4cc38a;--line:#2d333c;--dot:#2d333c}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:560px;margin:0 auto;padding:18px 16px 96px}
+h1{font-size:1.5rem;margin:0 0 2px}
+h2{font-size:1.05rem;margin:22px 0 10px}
+.sub{color:var(--muted);margin:0 0 14px;font-size:.9rem}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:10px}
+.row{display:flex;align-items:center;gap:10px}
+.grow{flex:1;min-width:0}
+.name{font-weight:600}
+.small{font-size:.8rem;color:var(--muted)}
+button{border:0;border-radius:10px;background:var(--accent);color:#fff;padding:10px 14px;font-size:.95rem;cursor:pointer}
+button.ghost{background:none;color:var(--muted);border:1px solid var(--line)}
+button.done{background:var(--dot);color:var(--text)}
+button.done.on{background:var(--accent);color:#fff}
+input[type=text]{flex:1;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--text);font-size:1rem;min-width:0}
+.bar{height:10px;border-radius:6px;background:var(--dot);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.big{font-size:2rem;font-weight:700}
+.chart{display:flex;align-items:flex-end;gap:8px;height:130px;padding-top:8px}
+.col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}
+.col i{display:block;width:100%;background:var(--accent);border-radius:6px 6px 0 0;min-height:3px}
+.col span{font-size:.7rem;color:var(--muted);margin-top:4px}
+.heat{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.heat i{aspect-ratio:1;border-radius:5px;background:var(--accent)}
+.empty{text-align:center;color:var(--muted);padding:30px 0}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{flex:1;background:none;color:var(--muted);border-radius:0;padding:12px 4px;font-size:.8rem}
+nav button b{display:block;font-size:1.25rem}
+nav button.act{color:var(--accent);font-weight:700}
+</style>
+</head>
+<body>
+<main id="app"></main>
+<nav id="nav">
+<button data-v="home"><b>🏠</b>Home</button>
+<button data-v="habits"><b>📝</b>Habits</button>
+<button data-v="charts"><b>📊</b>Charts</button>
+</nav>
+<script>
+var habits=[],sound=true,view="home",ctx=null;
+try{habits=JSON.parse(localStorage.getItem("habits")||"[]");sound=localStorage.getItem("sound")!=="off"}catch(e){}
+function save(){try{localStorage.setItem("habits",JSON.stringify(habits));localStorage.setItem("sound",sound?"on":"off")}catch(e){}}
+function key(d){var m=d.getMonth()+1,x=d.getDate();return d.getFullYear()+"-"+(m<10?"0":"")+m+"-"+(x<10?"0":"")+x}
+function ago(n){var d=new Date();d.setDate(d.getDate()-n);return d}
+function cur(h){var n=0,i=h.done[key(ago(0))]?0:1;while(h.done[key(ago(i))]){n++;i++}return n}
+function best(h){var b=0,n=0;for(var i=400;i>=0;i--){if(h.done[key(ago(i))]){n++;if(n>b)b=n}else n=0}return b}
+function pct(d){if(!habits.length)return 0;var k=key(d),c=0;habits.forEach(function(h){if(h.done[k])c++});return c/habits.length}
+function chime(){
+if(!sound)return;
+try{
+ctx=ctx||new (window.AudioContext||window.webkitAudioContext)();
+if(ctx.state==="suspended")ctx.resume();
+[[659,0],[784,.12],[1047,.24]].forEach(function(n){
+var o=ctx.createOscillator(),g=ctx.createGain(),t=ctx.currentTime+n[1];
+o.type="sine";o.frequency.value=n[0];
+g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.25,t+.02);g.gain.exponentialRampToValueAtTime(.001,t+.5);
+o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+.5)})
+}catch(e){}
+}
+function toggle(h){
+var k=key(ago(0));
+if(h.done[k])delete h.done[k];else{h.done[k]=true;chime()}
+save();render();
+}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function home(){
+var t=new Date(),k=key(t),n=0;habits.forEach(function(h){if(h.done[k])n++});
+var p=habits.length?Math.round(n/habits.length*100):0;
+var s='<h1>வணக்கம் 👋</h1><p class="sub">'+t.toLocaleDateString("ta-IN",{weekday:"long",day:"numeric",month:"long"})+'</p>';
+s+='<div class="card"><div class="row"><div class="grow"><div class="small">இன்றைய progress</div><div class="big">'+n+'/'+habits.length+'</div></div><button class="ghost" id="snd">'+(sound?"🔔 Sound ON":"🔕 Sound OFF")+'</button></div><div class="bar" style="margin-top:10px"><i style="width:'+p+'%"></i></div></div>';
+if(!habits.length)return s+'<div class="empty">Habits இல்லை. "Habits" menu-ல போய் சேருங்க.</div>';
+s+='<h2>இன்றைய வேலைகள்</h2>';
+habits.forEach(function(h,i){
+var on=h.done[k];
+s+='<div class="card row"><div class="grow"><div class="name">'+esc(h.name)+'</div><div class="small">🔥 '+cur(h)+' நாள் streak</div></div><button class="done'+(on?" on":"")+'" data-t="'+i+'">'+(on?"✓ முடிந்தது":"Mark done")+'</button></div>'});
+return s;
+}
+function manage(){
+var s='<h1>Habits</h1><p class="sub">சேர்க்க / நீக்க</p><div class="row" style="margin-bottom:14px"><input type="text" id="nm" placeholder="புது habit (உதா: உடற்பயிற்சி)"><button id="add">சேர்</button></div>';
+if(!habits.length)return s+'<div class="empty">இன்னும் habits இல்லை.</div>';
+habits.forEach(function(h,i){
+s+='<div class="card row"><div class="grow"><div class="name">'+esc(h.name)+'</div><div class="small">Best streak: '+best(h)+' நாள்</div></div><button class="ghost" data-d="'+i+'">நீக்கு</button></div>'});
+return s;
+}
+function charts(){
+var s='<h1>Charts</h1><p class="sub">உங்க progress</p>';
+if(!habits.length)return s+'<div class="empty">முதல்ல habits சேருங்க.</div>';
+s+='<h2>கடைசி 7 நாள் (completion %)</h2><div class="card"><div class="chart">';
+for(var i=6;i>=0;i--){var d=ago(i),p=Math.round(pct(d)*100);
+s+='<div class="col"><div class="small">'+p+'%</div><i style="height:'+Math.max(p*.8,2)+'%"></i><span>'+d.toLocaleDateString("en",{weekday:"short"}).slice(0,2)+'</span></div>'}
+s+='</div></div><h2>Streaks</h2>';
+var mx=1;habits.forEach(function(h){mx=Math.max(mx,best(h))});
+habits.forEach(function(h){var c=cur(h),b=best(h);
+s+='<div class="card"><div class="row"><div class="name grow">'+esc(h.name)+'</div><div class="small">🔥 '+c+' | 🏆 '+b+'</div></div><div class="bar" style="margin-top:8px"><i style="width:'+Math.round(c/mx*100)+'%"></i></div></div>'});
+s+='<h2>கடைசி 28 நாள் heatmap</h2><div class="card"><div class="heat">';
+for(var j=27;j>=0;j--){var q=pct(ago(j));s+='<i title="'+key(ago(j))+'" style="opacity:'+(q?.25+q*.75:.12)+'"></i>'}
+s+='</div></div>';
+return s;
+}
+function render(){
+var a=document.getElementById("app");
+a.innerHTML=view==="home"?home():view==="habits"?manage():charts();
+document.querySelectorAll("nav button").forEach(function(b){b.className=b.dataset.v===view?"act":""});
+a.querySelectorAll("[data-t]").forEach(function(b){b.onclick=function(){toggle(habits[+b.dataset.t])}});
+a.querySelectorAll("[data-d]").forEach(function(b){b.onclick=function(){if(confirm("நீக்கணுமா?")){habits.splice(+b.dataset.d,1);save();render()}}});
+var sn=document.getElementById("snd");if(sn)sn.onclick=function(){sound=!sound;save();if(sound)chime();render()};
+var ad=document.getElementById("add");
+if(ad){var add=function(){var i=document.getElementById("nm"),v=i.value.trim();if(!v)return;habits.push({name:v,done:{}});save();render()};ad.onclick=add;document.getElementById("nm").onkeydown=function(e){if(e.key==="Enter")add()}}
+}
+document.querySelectorAll("nav button").forEach(function(b){b.onclick=function(){view=b.dataset.v;render();window.scrollTo(0,0)}});
+render();
+</script>
+</body>
+</html>
